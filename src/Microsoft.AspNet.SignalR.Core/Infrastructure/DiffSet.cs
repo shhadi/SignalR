@@ -15,6 +15,7 @@ namespace Microsoft.AspNet.SignalR.Infrastructure
         {
             _addedItems = new HashSet<T>(items);
             _removedItems = new HashSet<T>();
+
             // We don't want to re-enumerate items
             _items = new SafeSet<T>(_addedItems);
         }
