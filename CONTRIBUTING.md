@@ -5,7 +5,7 @@ The github issue list is for bugs, not discussions. If you have a question you w
 - [The JabbR chat room](https://jabbr.net/#/rooms/signalr)
 - [Stackoverflow](http://stackoverflow.com/questions/tagged/signalr)
 
-When filing issues, try to give as much details as possible. The best way to get your bug fixed is to be as detailed as you can be about the problem.
+When filing issues, please use our [bug filing templates](https://gist.github.com/signalrcoreteam/5317001). The best way to get your bug fixed is to be as detailed as you can be about the problem.
 Providing a minimal project with steps to reproduce the problem is ideal. Here are questions you can answer before you file a bug to make
 sure you're not missing any important information.
 
@@ -52,7 +52,7 @@ The release is then merged into master and deleted and the cycle continues until
 
 ### Submitting Pull requests
 
-You will need to submit a [Contributor License Agreement](http://www.microsoft.com/web/webpi/eula/MSOpenTech_CLA.rtf) form before submitting your pull request. This needs to only be done once for any Microsoft OSS project. Download the Contributor License Agreement (CLA). Please fill in, sign, scan and email it to msopentech-cla@microsoft.com.
+You will need to submit a [Contributor License Agreement](http://go.microsoft.com/fwlink/?LinkID=293426&clcid=0x409) form before submitting your pull request. This needs to only be done once for any Microsoft Open Technologies OSS project. Download the Contributor License Agreement (CLA). Please fill in, sign, scan and email it to msopentech-cla@microsoft.com.
 
 Make sure you can build the code. Familiarize yourself with the project workflow and our coding conventions. If you don't know what a pull request is
 read this https://help.github.com/articles/using-pull-requests.
