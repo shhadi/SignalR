@@ -26,10 +26,13 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
         private readonly CancellationToken _shutDownToken;
         private int _disposed;
         private AppFunc _appFunc;
+        private string _instanceName;
+        private readonly Lazy<string> _defaultInstanceName;
 
         public MemoryHost()
         {
             _shutDownToken = _shutDownTokenSource.Token;
+            _defaultInstanceName = new Lazy<string>(() => Process.GetCurrentProcess().GetUniqueInstanceName(_shutDownToken));
         }
 
         public void Configure(Action<IAppBuilder> startup)
@@ -43,14 +46,24 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
 
             builder.Properties[OwinConstants.ServerCapabilities] = new Dictionary<string, object>();
             builder.Properties[OwinConstants.HostOnAppDisposing] = _shutDownToken;
-            builder.Properties[OwinConstants.HostAppNameKey] = InstanceName ?? Process.GetCurrentProcess().GetUniqueInstanceName(_shutDownToken);
+            builder.Properties[OwinConstants.HostAppNameKey] = InstanceName;
 
             startup(builder);
 
             _appFunc = Build(builder);
         }
 
-        public string InstanceName { get; set; }
+        public string InstanceName
+        {
+            get
+            {
+                return _instanceName ?? _defaultInstanceName.Value;
+            }
+            set
+            {
+                _instanceName = value;
+            }
+        }
 
         public Task<IClientResponse> Get(string url)
         {
@@ -111,6 +124,7 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
             // Request specific setup
             var uri = new Uri(url);
 
+            env[OwinConstants.RequestProtocol] = "HTTP/1.1";
             env[OwinConstants.CallCancelled] = clientTokenSource.Token;
             env[OwinConstants.RequestMethod] = httpMethod;
             env[OwinConstants.RequestPathBase] = String.Empty;
@@ -121,6 +135,9 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
             var headers = new Dictionary<string, string[]>();
             env[OwinConstants.RequestHeaders] = headers;
 
+            headers.SetHeader("X-Server", "MemoryHost");
+            headers.SetHeader("X-Server-Name", InstanceName);
+
             if (httpMethod == "POST")
             {
                 headers.SetHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -129,9 +146,19 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
             // Run the client function to initialize the request
             prepareRequest(new Request(env, clientTokenSource.Cancel));
 
-            Response response = null;
-            response = new Response(disableWrites, () => tcs.TrySetResult(response), clientTokenSource.Token);
-            env[OwinConstants.ResponseBody] = response.GetResponseStream();
+            var networkObservable = new NetworkObservable(disableWrites);
+            var clientStream = new ClientStream(networkObservable);
+            var serverStream = new ServerStream(networkObservable);
+
+            var response = new Response(clientStream);
+
+            // Trigger the tcs on flush. This mimicks the client side
+            networkObservable.OnFlush = () => tcs.TrySetResult(response);
+
+            // Cancel the network observable on cancellation of the token
+            clientTokenSource.Token.Register(networkObservable.Cancel);
+
+            env[OwinConstants.ResponseBody] = serverStream;
             env[OwinConstants.ResponseHeaders] = new Dictionary<string, string[]>();
 
             _appFunc(env).ContinueWith(task =>
@@ -155,7 +182,8 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
                     tcs.TrySetResult(response);
                 }
 
-                response.Close();
+                // Close the server stream when the request has ended
+                serverStream.Close();
                 clientTokenSource.Dispose();
             });
 
@@ -168,7 +196,7 @@ namespace Microsoft.AspNet.SignalR.Hosting.Memory
             {
                 if (Interlocked.Exchange(ref _disposed, 1) == 0)
                 {
-                    _shutDownTokenSource.Cancel(throwOnFirstException: false);
+                    _shutDownTokenSource.Cancel();
 
                     _shutDownTokenSource.Dispose();
                 }

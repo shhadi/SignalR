@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.md in the project root for license information.
 
 using System;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.IO;
 using System.Threading;
 using Microsoft.AspNet.SignalR.Client.Http;
@@ -15,6 +13,8 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
 {
     public class ServerSentEventsTransport : HttpBasedTransport
     {
+        private IRequest _request;
+
         public ServerSentEventsTransport()
             : this(new DefaultHttpClient())
         {
@@ -25,6 +25,17 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
         {
             ReconnectDelay = TimeSpan.FromSeconds(2);
             ConnectionTimeout = TimeSpan.FromSeconds(5);
+        }
+
+        /// <summary>
+        /// Indicates whether or not the transport supports keep alive
+        /// </summary>
+        public override bool SupportsKeepAlive
+        {
+            get
+            {
+                return true;
+            }
         }
 
         /// <summary>
@@ -56,7 +67,7 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                 if (!disconnectToken.IsCancellationRequested && connection.EnsureReconnecting())
                 {
                     // Now attempt a reconnect
-                    OpenConnection(connection, data,  disconnectToken, initializeCallback: null, errorCallback: null);
+                    OpenConnection(connection, data, disconnectToken, initializeCallback: null, errorCallback: null);
                 }
             });
         }
@@ -74,21 +85,16 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
             var callbackInvoker = new ThreadSafeInvoker();
             var requestDisposer = new Disposer();
 
-            var url = (reconnecting ? connection.Url : connection.Url + "connect") + GetReceiveQueryString(connection, data);
-            IRequest request = null;
+            var url = connection.Url + (reconnecting ? "reconnect" : "connect") + GetReceiveQueryString(connection, data);
 
-#if NET35
-            Debug.WriteLine(String.Format(CultureInfo.InvariantCulture, "SSE: GET {0}", (object)url));
-#else
-            Debug.WriteLine("SSE: GET {0}", (object)url);
-#endif
+            connection.Trace(TraceLevels.Events, "SSE: GET {0}", url);
 
             HttpClient.Get(url, req =>
             {
-                request = req;
-                connection.PrepareRequest(request);
+                _request = req;
+                connection.PrepareRequest(_request);
 
-                request.Accept = "text/event-stream";
+                _request.Accept = "text/event-stream";
             }).ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -112,20 +118,24 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                 }
                 else
                 {
-                    IResponse response = task.Result;
-                    Stream stream = response.GetResponseStream();
+                    var response = task.Result;
+                    Stream stream = response.GetStream();
 
-                    var eventSource = new EventSourceStreamReader(stream);
-                    bool retry = true;
+                    var eventSource = new EventSourceStreamReader(connection, stream);
 
-                    var esCancellationRegistration = disconnectToken.SafeRegister(es =>
+                    bool stop = false;
+
+                    var esCancellationRegistration = disconnectToken.SafeRegister(state =>
                     {
-                        retry = false;
-                        es.Close();
-                    }, eventSource);
+                        stop = true;
+
+                        ((IRequest)state).Abort();
+                    },
+                    _request);
 
                     eventSource.Opened = () =>
                     {
+                        // If we're not reconnecting, then we're starting the transport for the first time. Trigger callback only on first start.
                         if (!reconnecting)
                         {
                             callbackInvoker.Invoke(initializeCallback);
@@ -152,7 +162,7 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
 
                             if (disconnected)
                             {
-                                retry = false;
+                                stop = true;
                                 connection.Disconnect();
                             }
                         }
@@ -160,12 +170,10 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
 
                     eventSource.Closed = exception =>
                     {
-                        bool isRequestAborted = false;
-
                         if (exception != null)
                         {
                             // Check if the request is aborted
-                            isRequestAborted = ExceptionHelper.IsRequestAborted(exception);
+                            bool isRequestAborted = ExceptionHelper.IsRequestAborted(exception);
 
                             if (!isRequestAborted)
                             {
@@ -173,32 +181,34 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                                 connection.OnError(exception);
                             }
                         }
+                        requestDisposer.Dispose();
+                        esCancellationRegistration.Dispose();
+                        response.Dispose();
 
-                        // Skip reconnect attempt for aborted requests
-                        if (!isRequestAborted && retry)
+                        if (stop)
+                        {
+                            CompleteAbort();
+                        }
+                        else if (TryCompleteAbort())
+                        {
+                            // Abort() was called, so don't reconnect
+                        }
+                        else
                         {
                             Reconnect(connection, data, disconnectToken);
                         }
-                    };
-
-                    // See http://msdn.microsoft.com/en-us/library/system.net.httpwebresponse.close.aspx
-                    eventSource.Disabled = () =>
-                    {
-                        requestDisposer.Dispose();
-                        esCancellationRegistration.Dispose();
-                        response.Close();
                     };
 
                     eventSource.Start();
                 }
             });
 
-            var requestCancellationRegistration = disconnectToken.SafeRegister(req =>
+            var requestCancellationRegistration = disconnectToken.SafeRegister(state =>
             {
-                if (req != null)
+                if (state != null)
                 {
                     // This will no-op if the request is already finished.
-                    req.Abort();
+                    ((IRequest)state).Abort();
                 }
 
                 if (errorCallback != null)
@@ -212,7 +222,7 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
 #endif
                     }, errorCallback, disconnectToken);
                 }
-            }, request);
+            }, _request);
 
             requestDisposer.Set(requestCancellationRegistration);
 
@@ -223,7 +233,7 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                     callbackInvoker.Invoke((conn, cb) =>
                     {
                         // Abort the request before cancelling
-                        request.Abort();
+                        _request.Abort();
 
                         // Connection timeout occurred
                         cb(new TimeoutException());
@@ -231,6 +241,14 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                     connection,
                     errorCallback);
                 });
+            }
+        }
+
+        public override void LostConnection(IConnection connection)
+        {
+            if (_request != null)
+            {
+                _request.Abort();
             }
         }
     }

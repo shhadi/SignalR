@@ -1,19 +1,36 @@
 ﻿// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.md in the project root for license information.
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Microsoft.AspNet.SignalR.Messaging
 {
     public class ScaleoutMapping
     {
-        public ConcurrentDictionary<string, LocalEventKeyInfo> EventKeyMappings { get; private set; }
-
-        public ScaleoutMapping(IDictionary<string, LocalEventKeyInfo> mappings)
+        public ScaleoutMapping(ulong id, ScaleoutMessage message)
+            : this(id, message, new Dictionary<string, IList<LocalEventKeyInfo>>())
         {
-            EventKeyMappings = new ConcurrentDictionary<string, LocalEventKeyInfo>(mappings, StringComparer.OrdinalIgnoreCase);
         }
+
+        public ScaleoutMapping(ulong id, ScaleoutMessage message, IDictionary<string, IList<LocalEventKeyInfo>> localKeyInfo)
+        {
+            if (message == null)
+            {
+                throw new ArgumentNullException("message");
+            }
+
+            if (localKeyInfo == null)
+            {
+                throw new ArgumentNullException("localKeyInfo");
+            }
+
+            Id = id;
+            LocalKeyInfo = localKeyInfo;
+            ServerCreationTime = message.ServerCreationTime;
+        }
+
+        public ulong Id { get; private set; }
+        public IDictionary<string, IList<LocalEventKeyInfo>> LocalKeyInfo { get; private set; }
+        public DateTime ServerCreationTime { get; private set; }
     }
 }

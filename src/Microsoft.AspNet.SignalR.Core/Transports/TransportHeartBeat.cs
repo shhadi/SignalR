@@ -69,7 +69,16 @@ namespace Microsoft.AspNet.SignalR.Transports
                     // Only remove connections if this command didn't originate from the owner
                     if (!command.IsFromSelf(_serverId))
                     {
-                        RemoveConnection((string)command.Value);
+                        var connectionId = (string)command.Value;
+
+                        // Remove the connection
+                        ConnectionMetadata metadata;
+                        if (_connections.TryGetValue(connectionId, out metadata))
+                        {
+                            metadata.Connection.End();
+
+                            RemoveConnection(metadata.Connection);
+                        }
                     }
                     break;
                 default:
@@ -89,30 +98,27 @@ namespace Microsoft.AspNet.SignalR.Transports
             }
 
             var newMetadata = new ConnectionMetadata(connection);
-            ConnectionMetadata oldMetadata = null;
             bool isNewConnection = true;
 
             _connections.AddOrUpdate(connection.ConnectionId, newMetadata, (key, old) =>
             {
-                oldMetadata = old;
-                return newMetadata;
-            });
-
-            if (oldMetadata != null)
-            {
-                Trace.TraceInformation("Connection {0} exists. Closing previous connection.", oldMetadata.Connection.ConnectionId);
-
+                Trace.TraceEvent(TraceEventType.Verbose, 0, "Connection {0} exists. Closing previous connection.", old.Connection.ConnectionId);
                 // Kick out the older connection. This should only happen when 
                 // a previous connection attempt fails on the client side (e.g. transport fallback).
 
+                old.Connection.ApplyState(TransportConnectionStates.Replaced);
+
                 // Don't bother disposing the registration here since the token source
                 // gets disposed after the request has ended
-                EndConnection(oldMetadata, disposeRegistration: false);
+                old.Connection.End();
 
                 // If we have old metadata this isn't a new connection
                 isNewConnection = false;
-            }
-            else
+
+                return newMetadata;
+            });
+
+            if (isNewConnection)
             {
                 Trace.TraceInformation("Connection {0} is New.", connection.ConnectionId);
             }
@@ -125,24 +131,9 @@ namespace Microsoft.AspNet.SignalR.Transports
             // Set the initial connection time
             newMetadata.Initial = DateTime.UtcNow;
 
-            // Register for disconnect cancellation
-            newMetadata.Registration = connection.CancellationToken.SafeRegister(OnConnectionEnded, newMetadata);
+            newMetadata.Connection.ApplyState(TransportConnectionStates.Added);
 
             return isNewConnection;
-        }
-
-        private void RemoveConnection(string connectionId)
-        {
-            // Remove the connection
-            ConnectionMetadata metadata;
-            if (_connections.TryRemove(connectionId, out metadata))
-            {
-                lock (_counterLock)
-                {
-                    _counters.ConnectionsCurrent.RawValue = _connections.Count;
-                }
-                Trace.TraceInformation("Removing connection {0}", connectionId);
-            }
         }
 
         /// <summary>
@@ -157,7 +148,18 @@ namespace Microsoft.AspNet.SignalR.Transports
             }
 
             // Remove the connection and associated metadata
-            RemoveConnection(connection.ConnectionId);
+            ConnectionMetadata metadata;
+            if (_connections.TryRemove(connection.ConnectionId, out metadata))
+            {
+                lock (_counterLock)
+                {
+                    _counters.ConnectionsCurrent.RawValue = _connections.Count;
+                }
+
+                connection.ApplyState(TransportConnectionStates.Removed);
+
+                Trace.TraceInformation("Removing connection {0}", connection.ConnectionId);
+            }
         }
 
         /// <summary>
@@ -194,7 +196,7 @@ namespace Microsoft.AspNet.SignalR.Transports
         {
             if (Interlocked.Exchange(ref _running, 1) == 1)
             {
-                Trace.TraceInformation("Timer handler took longer than current interval");
+                Trace.TraceEvent(TraceEventType.Verbose, 0, "Timer handler took longer than current interval");
                 return;
             }
 
@@ -232,27 +234,12 @@ namespace Microsoft.AspNet.SignalR.Transports
             }
         }
 
-        private void OnConnectionEnded(ConnectionMetadata metadata)
-        {
-            Trace.TraceInformation("OnConnectionEnded({0})", metadata.Connection.ConnectionId);
-
-            // Release the request
-            metadata.Connection.ReleaseRequest();
-
-            if (metadata.Registration != null)
-            {
-                metadata.Registration.Dispose();
-            }
-        }
-
         private void CheckTimeoutAndKeepAlive(ConnectionMetadata metadata)
         {
             if (RaiseTimeout(metadata))
             {
                 // If we're past the expiration time then just timeout the connection
                 metadata.Connection.Timeout();
-
-                EndConnection(metadata);
             }
             else
             {
@@ -263,11 +250,8 @@ namespace Microsoft.AspNet.SignalR.Transports
                 {
                     Trace.TraceEvent(TraceEventType.Verbose, 0, "KeepAlive(" + metadata.Connection.ConnectionId + ")");
 
-                    metadata.Connection.KeepAlive()
-                                       .Catch(ex =>
-                                       {
-                                           Trace.TraceEvent(TraceEventType.Error, 0, "Failed to send keep alive: " + ex.GetBaseException());
-                                       });
+                    // Ensure delegate continues to use the C# Compiler static delegate caching optimization.
+                    metadata.Connection.KeepAlive().Catch((ex, state) => OnKeepAliveError(ex, state), Trace);
                 }
 
                 MarkConnection(metadata.Connection);
@@ -354,13 +338,15 @@ namespace Microsoft.AspNet.SignalR.Transports
                     _timer.Dispose();
                 }
 
+                Trace.TraceInformation("Dispose(). Closing all connections");
+
                 // Kill all connections
                 foreach (var pair in _connections)
                 {
                     ConnectionMetadata metadata;
                     if (_connections.TryGetValue(pair.Key, out metadata))
                     {
-                        EndConnection(metadata);
+                        metadata.Connection.End();
                     }
                 }
             }
@@ -371,19 +357,9 @@ namespace Microsoft.AspNet.SignalR.Transports
             Dispose(true);
         }
 
-        private static void EndConnection(ConnectionMetadata metadata, bool disposeRegistration = true)
+        private static void OnKeepAliveError(AggregateException ex, object state)
         {
-            if (disposeRegistration)
-            {
-                // Dispose of the registration
-                if (metadata.Registration != null)
-                {
-                    metadata.Registration.Dispose();
-                }
-            }
-
-            // End the connection
-            metadata.Connection.End();
+            ((TraceSource)state).TraceEvent(TraceEventType.Error, 0, "Failed to send keep alive: " + ex.GetBaseException());
         }
 
         private class ConnectionMetadata
@@ -403,9 +379,6 @@ namespace Microsoft.AspNet.SignalR.Transports
 
             // The initial connection time of the connection
             public DateTime Initial { get; set; }
-
-            // The cancellation token registration
-            public IDisposable Registration { get; set; }
         }
     }
 }

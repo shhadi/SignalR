@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Threading;
@@ -21,6 +20,20 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
         // The transport name
         private readonly string _transport;
 
+        // Used to complete the synchronous call to Abort()
+        private ManualResetEvent _abortResetEvent = new ManualResetEvent(initialState: false);
+
+        // Used to indicate whether Abort() has been called
+        private bool _startedAbort;
+        // Used to ensure that Abort() runs effectively only once
+        // The _abortLock subsumes the _disposeLock and can be held upwards of 30 seconds
+        private readonly object _abortLock = new object();
+
+        // Used to ensure the _abortResetEvent.Set() isn't called after disposal
+        private bool _disposed;
+        // Used to make checking _disposed and calling _abortResetEvent.Set() thread safe
+        private readonly object _disposeLock = new object();
+
         private readonly IHttpClient _httpClient;
 
         protected HttpBasedTransport(IHttpClient httpClient, string transport)
@@ -36,6 +49,11 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                 return _transport;
             }
         }
+
+        /// <summary>
+        /// Indicates whether or not the transport supports keep alive
+        /// </summary>
+        public abstract bool SupportsKeepAlive { get; }
 
         protected IHttpClient HttpClient
         {
@@ -72,10 +90,10 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
             string url = connection.Url + "send";
             string customQueryString = String.IsNullOrEmpty(connection.QueryString) ? String.Empty : "&" + connection.QueryString;
 
-            url += String.Format(CultureInfo.InvariantCulture, 
-                                _sendQueryString, 
-                                _transport, 
-                                Uri.EscapeDataString(connection.ConnectionToken), 
+            url += String.Format(CultureInfo.InvariantCulture,
+                                _sendQueryString,
+                                _transport,
+                                Uri.EscapeDataString(connection.ConnectionToken),
                                 customQueryString);
 
             var postData = new Dictionary<string, string> {
@@ -83,9 +101,10 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
             };
 
             return _httpClient.Post(url, connection.PrepareRequest, postData)
-                              .Then(response =>
+                              .Then(response => response.ReadAsString())
+                              .Then(raw =>
                               {
-                                  string raw = response.ReadAsString();
+                                  connection.Trace(TraceLevels.Messages, "OnMessage({0})", raw);
 
                                   if (!String.IsNullOrEmpty(raw))
                                   {
@@ -95,29 +114,83 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                               .Catch(connection.OnError);
         }
 
-        [SuppressMessage("Microsoft.Design", "CA1031:DoNotCatchGeneralExceptionTypes", Justification = "We don't want Stop to throw. IHttpClient.PostAsync could throw anything.")]
-        public void Abort(IConnection connection)
+        public void Abort(IConnection connection, TimeSpan timeout)
         {
             if (connection == null)
             {
                 throw new ArgumentNullException("connection");
             }
 
-            string url = connection.Url + "abort" + String.Format(CultureInfo.InvariantCulture, 
-                                                                  _sendQueryString, 
-                                                                  _transport, 
-                                                                  Uri.EscapeDataString(connection.ConnectionToken), 
-                                                                  null);
+            // Abort should never complete before any of its previous calls
+            lock (_abortLock)
+            {
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(GetType().Name);
+                }
 
-            try
-            {
-                // Attempt to perform a clean disconnect, but only wait 2 seconds
-                _httpClient.Post(url, connection.PrepareRequest).Wait(TimeSpan.FromSeconds(2));
+                // Ensure that an abort request is only made once
+                if (!_startedAbort)
+                {
+                    _startedAbort = true;
+
+                    string url = connection.Url + "abort" + String.Format(CultureInfo.InvariantCulture,
+                                                                          _sendQueryString,
+                                                                          _transport,
+                                                                          Uri.EscapeDataString(connection.ConnectionToken),
+                                                                          null);
+
+                    url += TransportHelper.AppendCustomQueryString(connection, url);
+
+                    _httpClient.Post(url, connection.PrepareRequest).Catch((ex, state) =>
+                    {
+                        // If there's an error making an http request set the reset event
+                        ((HttpBasedTransport)state).CompleteAbort();
+                    },
+                    this);
+
+                    if (!_abortResetEvent.WaitOne(timeout))
+                    {
+                        connection.Trace(TraceLevels.Events, "Abort never fired");
+                    }
+                }
             }
-            catch (Exception ex)
+        }
+
+        protected void CompleteAbort()
+        {
+            lock (_disposeLock)
             {
-                // Swallow any exceptions, but log them
-                Debug.WriteLine("Clean disconnect failed. " + ex.Unwrap().Message);
+                if (!_disposed)
+                {
+                    // Make any future calls to Abort() no-op
+                    // Abort might still run, but any ongoing aborts will immediately complete
+                    _startedAbort = true;
+                    // Ensure any ongoing calls to Abort() complete
+                    _abortResetEvent.Set();
+                }
+            }
+        }
+
+        protected bool TryCompleteAbort()
+        {
+            // Make sure we don't Set a disposed ManualResetEvent
+            lock (_disposeLock)
+            {
+                if (_disposed)
+                {
+                    // Don't try to continue receiving messages if the transport is disposed
+                    return true;
+                }
+                else if (_startedAbort)
+                {
+                    _abortResetEvent.Set();
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
         }
 
@@ -126,5 +199,30 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
             return TransportHelper.GetReceiveQueryString(connection, data, _transport);
         }
 
+        public abstract void LostConnection(IConnection connection);
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // Wait for any ongoing aborts to complete
+                // In practice, any aborts should have finished by the time Dispose is called
+                lock (_abortLock)
+                lock (_disposeLock)
+                {
+                    if (!_disposed)
+                    {
+                        _abortResetEvent.Dispose();
+                        _disposed = true;
+                    }
+                }
+           }
+        }
     }
 }
