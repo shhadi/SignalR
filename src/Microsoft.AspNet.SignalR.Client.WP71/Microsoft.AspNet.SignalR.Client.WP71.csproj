@@ -26,7 +26,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>Bin\x86\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE;SILVERLIGHT;WINDOWS_PHONE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;SILVERLIGHT;WINDOWS_PHONE;WINDOWS_PHONE7</DefineConstants>
     <NoStdLib>true</NoStdLib>
     <NoConfig>true</NoConfig>
     <ErrorReport>prompt</ErrorReport>
@@ -48,22 +48,23 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Threading.Tasks">
-      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.14-rc\lib\sl4-windowsphone71\Microsoft.Threading.Tasks.dll</HintPath>
+      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.16\lib\sl4-windowsphone71\Microsoft.Threading.Tasks.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Threading.Tasks.Extensions">
-      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.14-rc\lib\sl4-windowsphone71\Microsoft.Threading.Tasks.Extensions.dll</HintPath>
+      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.16\lib\sl4-windowsphone71\Microsoft.Threading.Tasks.Extensions.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Threading.Tasks.Extensions.Phone">
-      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.14-rc\lib\sl4-windowsphone71\Microsoft.Threading.Tasks.Extensions.Phone.dll</HintPath>
+      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.16\lib\sl4-windowsphone71\Microsoft.Threading.Tasks.Extensions.Phone.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\..\packages\Newtonsoft.Json.4.5.11\lib\sl4-windowsphone71\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System.Runtime">
-      <HintPath>..\..\packages\Microsoft.Bcl.1.0.16-rc\lib\sl4-windowsphone71\System.Runtime.dll</HintPath>
+      <HintPath>..\..\packages\Microsoft.Bcl.1.0.19\lib\sl4-windowsphone71\System.Runtime.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System.Threading.Tasks">
-      <HintPath>..\..\packages\Microsoft.Bcl.1.0.16-rc\lib\sl4-windowsphone71\System.Threading.Tasks.dll</HintPath>
+      <HintPath>..\..\packages\Microsoft.Bcl.1.0.19\lib\sl4-windowsphone71\System.Threading.Tasks.dll</HintPath>
     </Reference>
     <Reference Include="System.Windows" />
     <Reference Include="system" />
@@ -88,74 +89,132 @@
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\ConnectionState.cs">
       <Link>ConnectionState.cs</Link>
     </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\HeaderDictionary.cs">
+      <Link>HeaderDictionary.cs</Link>
+    </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\HeartBeatMonitor.cs">
+      <Link>HeartBeatMonitor.cs</Link>
+    </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\DefaultHttpClient.cs">
       <Link>Http\DefaultHttpClient.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\HttpHelper.cs">
       <Link>Http\HttpHelper.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\HttpWebRequestWrapper.cs">
       <Link>Http\HttpWebRequestWrapper.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\HttpWebResponseWrapper.cs">
       <Link>Http\HttpWebResponseWrapper.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\IHttpClient.cs">
       <Link>Http\IHttpClient.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\IHttpClientExtensions.cs">
       <Link>Http\IHttpClientExtensions.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\IRequest.cs">
       <Link>Http\IRequest.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\IResponse.cs">
       <Link>Http\IResponse.cs</Link>
+      <SubType>
+      </SubType>
+    </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\Http\IResponseExtensions.cs">
+      <Link>Http\IResponseExtensions.cs</Link>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\HubConnection.cs">
       <Link>Hubs\HubConnection.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\HubInvocation.cs">
       <Link>Hubs\HubInvocation.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\HubProxy.cs">
       <Link>Hubs\HubProxy.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\HubProxyExtensions.cs">
       <Link>Hubs\HubProxyExtensions.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\HubRegistrationData.cs">
       <Link>Hubs\HubRegistrationData.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\HubResult.cs">
       <Link>Hubs\HubResult.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\IHubConnection.cs">
       <Link>Hubs\IHubConnection.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\IHubProxy.cs">
       <Link>Hubs\IHubProxy.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Hubs\Subscription.cs">
       <Link>Hubs\Subscription.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\IConnection.cs">
       <Link>IConnection.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Infrastructure\ExceptionHelper.cs">
       <Link>Infrastructure\ExceptionHelper.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Infrastructure\StreamExtensions.cs">
       <Link>Infrastructure\StreamExtensions.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Infrastructure\ThreadSafeInvoker.cs">
       <Link>Infrastructure\ThreadSafeInvoker.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Infrastructure\UrlEncoder.cs">
       <Link>Infrastructure\UrlEncoder.cs</Link>
+      <SubType>
+      </SubType>
+    </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\KeepAliveData.cs">
+      <Link>KeepAliveData.cs</Link>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\NegotiationResponse.cs">
       <Link>NegotiationResponse.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Resources.Designer.cs">
       <Link>Resources.Designer.cs</Link>
@@ -163,53 +222,95 @@
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\StateChange.cs">
       <Link>StateChange.cs</Link>
     </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\TraceLevels.cs">
+      <Link>TraceLevels.cs</Link>
+    </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\AsyncStreamReader.cs">
+      <Link>Transports\AsyncStreamReader.cs</Link>
+    </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\AutoTransport.cs">
       <Link>Transports\AutoTransport.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\HttpBasedTransport.cs">
       <Link>Transports\HttpBasedTransport.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\IClientTransport.cs">
       <Link>Transports\IClientTransport.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\LongPollingTransport.cs">
       <Link>Transports\LongPollingTransport.cs</Link>
+      <SubType>
+      </SubType>
+    </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\LongPolling\NegotiateInitializer.cs">
+      <Link>Transports\LongPolling\NegotiateInitializer.cs</Link>
+    </Compile>
+    <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\LongPolling\PollingRequestHandler.cs">
+      <Link>Transports\LongPolling\PollingRequestHandler.cs</Link>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\ServerSentEventsTransport.cs">
       <Link>Transports\ServerSentEventsTransport.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\ServerSentEvents\ChunkBuffer.cs">
       <Link>Transports\ServerSentEvents\ChunkBuffer.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\ServerSentEvents\EventSourceStreamReader.cs">
       <Link>Transports\ServerSentEvents\EventSourceStreamReader.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\ServerSentEvents\EventType.cs">
       <Link>Transports\ServerSentEvents\EventType.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\ServerSentEvents\SseEvent.cs">
       <Link>Transports\ServerSentEvents\SseEvent.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Client\Transports\TransportHelper.cs">
       <Link>Transports\TransportHelper.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Core\Infrastructure\CancellationTokenExtensions.cs">
       <Link>Infrastructure\CancellationTokenExtensions.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Core\Infrastructure\DisposableAction.cs">
       <Link>Infrastructure\DisposableAction.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Core\Infrastructure\Disposer.cs">
       <Link>Infrastructure\Disposer.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Core\Infrastructure\ExceptionsExtensions.cs">
       <Link>Infrastructure\ExceptionsExtensions.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Core\Infrastructure\SafeCancellationTokenSource.cs">
       <Link>Infrastructure\SafeCancellationTokenSource.cs</Link>
     </Compile>
     <Compile Include="..\Microsoft.AspNet.SignalR.Core\TaskAsyncHelper.cs">
       <Link>Infrastructure\TaskAsyncHelper.cs</Link>
+      <SubType>
+      </SubType>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -227,7 +328,7 @@
   <Import Project="$(MSBuildExtensionsPath)\Microsoft\Silverlight for Phone\$(TargetFrameworkVersion)\Microsoft.Silverlight.CSharp.targets" />
   <ProjectExtensions />
   <Import Project="$(SolutionDir)\.nuget\nuget.targets" />
-  <Import Project="..\..\packages\Microsoft.Bcl.Build.1.0.0-rc\tools\Microsoft.Bcl.Build.targets" />
+  <Import Project="..\..\packages\Microsoft.Bcl.Build.1.0.5\tools\Microsoft.Bcl.Build.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

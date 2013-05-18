@@ -17,7 +17,9 @@ namespace Microsoft.AspNet.SignalR.Client.Http
         private IDictionary<string, Action<HttpWebRequest, string>> _restrictedHeadersSet = new Dictionary<string, Action<HttpWebRequest, string>>() {
                                                                         { HttpRequestHeader.Accept.ToString(), (request, value) => { request.Accept = value; } },                                                                       
                                                                         { HttpRequestHeader.ContentType.ToString(), (request, value) => { request.ContentType = value; } },
+#if !WINDOWS_PHONE7
                                                                         { HttpRequestHeader.ContentLength.ToString(), (request, value) => { request.ContentLength = Int32.Parse(value, CultureInfo.CurrentCulture); } }, 
+#endif
                                                                         { HttpRequestHeader.UserAgent.ToString(), (request, value) => { request.UserAgent = value; } },
 #if (!WINDOWS_PHONE && !SILVERLIGHT)                                                                                                                                               
                                                                         { HttpRequestHeader.Connection.ToString(), (request, value) => { request.Connection = value; } },
