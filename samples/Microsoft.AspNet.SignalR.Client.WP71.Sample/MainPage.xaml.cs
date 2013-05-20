@@ -1,83 +1,52 @@
 ﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using Microsoft.AspNet.SignalR.Client.Hubs;
-using Microsoft.AspNet.SignalR.Client.WP71.Sample.ViewModels;
-using Microsoft.Phone.Controls;
+using System.Collections.ObjectModel;
 
 namespace Microsoft.AspNet.SignalR.Client.WP71.Sample
 {
-    public partial class MainPage : PhoneApplicationPage
+    public partial class MainPage
     {
+        public ObservableCollection<string> Items { get; set; }
+
         // Constructor
         public MainPage()
         {
             InitializeComponent();
 
+            Items = new ObservableCollection<string>();
+
             // Set the data context of the listbox control to the sample data
-            DataContext = App.ViewModel;
-            this.Loaded += new RoutedEventHandler(MainPage_Loaded);
+            DataContext = this;
+        }
 
-            var connection = new HubConnection("http://signalr-sample.azurewebsites.net");
+        protected override async void OnNavigatedTo(System.Windows.Navigation.NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
 
-            var hub = connection.CreateHubProxy("statushub");
+            var connection = new Connection("http://192.168.100.109:40476/raw-connection");
 
-            hub.On<string>("joined", data =>
-            {
-                Dispatcher.BeginInvoke(() =>
-                {
-                    App.ViewModel.Items.Add(new ItemViewModel { LineOne = data });
-                });
-            });
+            connection.Received += Report;
+
+            connection.Reconnected += () => Report("[{0}]: Connection restablished", DateTime.Now);
+
+            connection.StateChanged += change => Report(change.OldState + " => " + change.NewState);
 
             connection.Error += ex =>
             {
-                Dispatcher.BeginInvoke(() =>
-                {
-                    var aggEx = (AggregateException)ex;
-                    App.ViewModel.Items.Add(new ItemViewModel { LineOne = aggEx.InnerExceptions[0].Message });
-                });
+                Report("========ERROR==========" + ex.Message + "=======================");
             };
 
-            connection.Reconnected += () =>
-            {
-                Dispatcher.BeginInvoke(() =>
-                {
-                    App.ViewModel.Items.Add(new ItemViewModel { LineOne = "Connection restored" });
-                });
-            };
-
-            var scheduler = TaskScheduler.FromCurrentSynchronizationContext();
-            connection.Start().ContinueWith(task =>
-            {
-                var ex = task.Exception.InnerExceptions[0];
-                App.ViewModel.Items.Add(new ItemViewModel { LineOne = ex.Message });
-            },
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted,
-            scheduler);
+            Items.Add("Starting...");
+            await connection.Start();
         }
 
-        // Handle selection changed on ListBox
-        private void MainListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        void Report(string message)
         {
-            // If selected index is -1 (no selection) do nothing
-            if (MainListBox.SelectedIndex == -1)
-                return;
-
-            // Navigate to the new page
-            NavigationService.Navigate(new Uri("/DetailsPage.xaml?selectedItem=" + MainListBox.SelectedIndex, UriKind.Relative));
-
-            // Reset selected index to -1 (no selection)
-            MainListBox.SelectedIndex = -1;
+            Dispatcher.BeginInvoke(() => Items.Add(message));
         }
 
-        // Load data for the ViewModel Items
-        private void MainPage_Loaded(object sender, RoutedEventArgs e)
+        void Report(string format, params object[] args)
         {
-
+            Dispatcher.BeginInvoke(() => Items.Insert(0, string.Format(format, args)));
         }
     }
 }

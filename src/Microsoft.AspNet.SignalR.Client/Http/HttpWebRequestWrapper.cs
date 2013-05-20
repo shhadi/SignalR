@@ -21,7 +21,7 @@ namespace Microsoft.AspNet.SignalR.Client.Http
                                                                         { HttpRequestHeader.ContentLength.ToString(), (request, value) => { request.ContentLength = Int32.Parse(value, CultureInfo.CurrentCulture); } }, 
 #endif
                                                                         { HttpRequestHeader.UserAgent.ToString(), (request, value) => { request.UserAgent = value; } },
-#if (!WINDOWS_PHONE && !SILVERLIGHT)                                                                                                                                               
+#if (!WINDOWS_PHONE && !SILVERLIGHT && !ANDROID)                                                                                                                                               
                                                                         { HttpRequestHeader.Connection.ToString(), (request, value) => { request.Connection = value; } },
                                                                         { HttpRequestHeader.Date.ToString(), (request, value) => {request.Date = DateTime.Parse(value, CultureInfo.CurrentCulture); } },
                                                                         { HttpRequestHeader.Expect.ToString(), (request, value) => {request.Expect = value;} },
