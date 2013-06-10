@@ -11,4 +11,14 @@ namespace Microsoft.AspNet.SignalR.Client
         StateChanges = 4,
         All = Messages | Events | StateChanges
     }
+
+#if WINDOWS_PHONE7
+    public static class TraceLevelsExtensions
+    {
+        public static bool HasFlag(this TraceLevels @this, TraceLevels traceLevels)
+        {
+            return ((int)@this & (int)traceLevels) == (int)traceLevels;
+        }
+    }
+#endif
 }
