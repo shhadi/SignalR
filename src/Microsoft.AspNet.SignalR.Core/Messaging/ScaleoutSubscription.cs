@@ -1,10 +1,10 @@
 ﻿// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.md in the project root for license information.
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
+using System.Globalization;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNet.SignalR.Infrastructure;
 
@@ -12,43 +12,58 @@ namespace Microsoft.AspNet.SignalR.Messaging
 {
     public class ScaleoutSubscription : Subscription
     {
-        private readonly ConcurrentDictionary<string, IndexedDictionary<ulong, ScaleoutMapping>> _streams;
-        private List<Cursor> _cursors;
+        private readonly IList<ScaleoutMappingStore> _streams;
+        private readonly List<Cursor> _cursors;
 
         public ScaleoutSubscription(string identity,
-                                    IEnumerable<string> eventKeys,
+                                    IList<string> eventKeys,
                                     string cursor,
-                                    ConcurrentDictionary<string, IndexedDictionary<ulong, ScaleoutMapping>> streamMappings,
-                                    Func<MessageResult, Task<bool>> callback,
+                                    IList<ScaleoutMappingStore> streams,
+                                    Func<MessageResult, object, Task<bool>> callback,
                                     int maxMessages,
-                                    IPerformanceCounterManager counters)
-            : base(identity, eventKeys, callback, maxMessages, counters)
+                                    IPerformanceCounterManager counters,
+                                    object state)
+            : base(identity, eventKeys, callback, maxMessages, counters, state)
         {
-            if (streamMappings == null)
+            if (streams == null)
             {
-                throw new ArgumentNullException("streamMappings");
+                throw new ArgumentNullException("streams");
             }
 
-            _streams = streamMappings;
+            _streams = streams;
 
-            IEnumerable<Cursor> cursors = null;
+            List<Cursor> cursors = null;
 
-            if (cursor == null)
+            if (String.IsNullOrEmpty(cursor))
             {
-                cursors = from key in _streams.Keys
-                          select new Cursor(key, GetCursorId(key));
+                cursors = new List<Cursor>();
             }
             else
             {
                 cursors = Cursor.GetCursors(cursor);
+
+                // If the streams don't match the cursors then throw it out
+                if (cursors.Count != _streams.Count)
+                {
+                    cursors.Clear();
+                }
             }
 
-            _cursors = new List<Cursor>(cursors);
+            // No cursors so we need to populate them from the list of streams
+            if (cursors.Count == 0)
+            {
+                for (int streamIndex = 0; streamIndex < _streams.Count; streamIndex++)
+                {
+                    AddCursorForStream(streamIndex, cursors);
+                }
+            }
+
+            _cursors = cursors;
         }
 
-        public override string GetCursor()
+        public override void WriteCursor(TextWriter textWriter)
         {
-            return Cursor.MakeCursor(_cursors);
+            Cursor.WriteCursors(textWriter, _cursors);
         }
 
         [SuppressMessage("Microsoft.Design", "CA1002:DoNotExposeGenericLists", Justification = "The list needs to be populated")]
@@ -56,113 +71,205 @@ namespace Microsoft.AspNet.SignalR.Messaging
         protected override void PerformWork(IList<ArraySegment<Message>> items, out int totalCount, out object state)
         {
             // The list of cursors represent (streamid, payloadid)
-            var cursors = new List<Cursor>();
+            var nextCursors = new ulong?[_cursors.Count];
             totalCount = 0;
 
-            foreach (var stream in _streams)
+            // Get the enumerator so that we can extract messages for this subscription
+            IEnumerator<Tuple<ScaleoutMapping, int>> enumerator = GetMappings().GetEnumerator();
+
+            while (totalCount < MaxMessages && enumerator.MoveNext())
             {
-                // Get the mapping for this stream
-                IndexedDictionary<ulong, ScaleoutMapping> mapping = stream.Value;
+                ScaleoutMapping mapping = enumerator.Current.Item1;
+                int streamIndex = enumerator.Current.Item2;
 
-                // See if we have a cursor for this key
-                Cursor cursor = null;
+                ulong? nextCursor = nextCursors[streamIndex];
 
-                // REVIEW: We should optimize this
-                int index = _cursors.FindIndex(c => c.Key == stream.Key);
-
-                bool consumed = true;
-
-                if (index != -1)
+                // Only keep going with this stream if the cursor we're looking at is bigger than
+                // anything we already processed
+                if (nextCursor == null || mapping.Id > nextCursor)
                 {
-                    cursor = Cursor.Clone(_cursors[index]);
-
-                    // If there's no node for this cursor id it's likely because we've
-                    // had an app domain restart and the cursor position is now invalid.
-                    if (mapping[cursor.Id] == null)
-                    {
-                        // Set it to the first id in this mapping
-                        cursor.Id = stream.Value.MinKey;
-
-                        // Mark this cursor as unconsumed
-                        consumed = false;
-                    }
-                }
-                else
-                {
-                    // Create a cursor and add it to the list.
-                    // Point the Id to the first value
-                    cursor = new Cursor(key: stream.Key, id: stream.Value.MinKey);
-
-                    consumed = false;
-                }
-
-                cursors.Add(cursor);
-
-                // Try to find a local mapping for this payload
-                LinkedListNode<KeyValuePair<ulong, ScaleoutMapping>> node = mapping[cursor.Id];
-
-                // Skip this node only if this isn't a new cursor
-                if (node != null && consumed)
-                {
-                    // Skip this node since we've already consumed it
-                    node = node.Next;
-                }
-
-                while (node != null)
-                {
-                    KeyValuePair<ulong, ScaleoutMapping> pair = node.Value;
-
-                    // Stop if we got more than max messages
-                    if (totalCount >= MaxMessages)
-                    {
-                        break;
-                    }
-
-                    // It should be ok to lock here since groups aren't modified that often
-                    lock (EventKeys)
-                    {
-                        // For each of the event keys we care about, extract all of the messages
-                        // from the payload
-                        foreach (var eventKey in EventKeys)
-                        {
-                            LocalEventKeyInfo info;
-                            if (pair.Value.EventKeyMappings.TryGetValue(eventKey, out info))
-                            {
-                                int maxMessages = Math.Min(info.Count, MaxMessages);
-                                MessageStoreResult<Message> storeResult = info.Store.GetMessages(info.MinLocal, maxMessages);
-
-                                if (storeResult.Messages.Count > 0)
-                                {
-                                    items.Add(storeResult.Messages);
-                                    totalCount += storeResult.Messages.Count;
-                                }
-                            }
-                        }
-                    }
+                    ulong mappingId = ExtractMessages(streamIndex, mapping, items, ref totalCount);
 
                     // Update the cursor id
-                    cursor.Id = pair.Key;
-                    node = node.Next;
+                    nextCursors[streamIndex] = mappingId;
                 }
             }
 
-            state = cursors;
+            state = nextCursors;
         }
 
         protected override void BeforeInvoke(object state)
         {
-            _cursors = (List<Cursor>)state;
+            // Update the list of cursors before invoking anything
+            var nextCursors = (ulong?[])state;
+            for (int i = 0; i < _cursors.Count; i++)
+            {
+                // Only update non-null entries
+                ulong? nextCursor = nextCursors[i];
+
+                if (nextCursor.HasValue)
+                {
+                    Cursor cursor = _cursors[i];
+
+                    cursor.Id = nextCursor.Value;
+                }
+            }
         }
 
-        private ulong GetCursorId(string key)
+        private IEnumerable<Tuple<ScaleoutMapping, int>> GetMappings()
         {
-            IndexedDictionary<ulong, ScaleoutMapping> mapping;
-            if (_streams.TryGetValue(key, out mapping))
+            var enumerators = new List<CachedStreamEnumerator>();
+
+            for (var streamIndex = 0; streamIndex < _streams.Count; ++streamIndex)
             {
-                return mapping.MaxKey;
+                // Get the mapping for this stream
+                ScaleoutMappingStore store = _streams[streamIndex];
+
+                Cursor cursor = _cursors[streamIndex];
+
+                // Try to find a local mapping for this payload
+                var enumerator = new CachedStreamEnumerator(store.GetEnumerator(cursor.Id),
+                                                            streamIndex);
+
+                enumerators.Add(enumerator);
             }
 
-            return 0;
+            while (enumerators.Count > 0)
+            {
+                ScaleoutMapping minMapping = null;
+                CachedStreamEnumerator minEnumerator = null;
+
+                for (int i = enumerators.Count - 1; i >= 0; i--)
+                {
+                    CachedStreamEnumerator enumerator = enumerators[i];
+
+                    ScaleoutMapping mapping;
+                    if (enumerator.TryMoveNext(out mapping))
+                    {
+                        if (minMapping == null || mapping.ServerCreationTime < minMapping.ServerCreationTime)
+                        {
+                            minMapping = mapping;
+                            minEnumerator = enumerator;
+                        }
+                    }
+                    else
+                    {
+                        enumerators.RemoveAt(i);
+                    }
+                }
+
+                if (minMapping != null)
+                {
+                    minEnumerator.ClearCachedValue();
+                    yield return Tuple.Create(minMapping, minEnumerator.StreamIndex);
+                }
+            }
+        }
+
+        private ulong ExtractMessages(int streamIndex, ScaleoutMapping mapping, IList<ArraySegment<Message>> items, ref int totalCount)
+        {
+            // For each of the event keys we care about, extract all of the messages
+            // from the payload
+            lock (EventKeys)
+            {
+                for (var i = 0; i < EventKeys.Count; ++i)
+                {
+                    string eventKey = EventKeys[i];
+
+                    for (int j = 0; j < mapping.LocalKeyInfo.Count; j++)
+                    {
+                        LocalEventKeyInfo info = mapping.LocalKeyInfo[j];
+
+                        if (info.MessageStore != null && info.Key.Equals(eventKey, StringComparison.OrdinalIgnoreCase))
+                        {
+                            MessageStoreResult<Message> storeResult = info.MessageStore.GetMessages(info.Id, 1);
+
+                            if (storeResult.Messages.Count > 0)
+                            {
+                                // TODO: Figure out what to do when we have multiple event keys per mapping
+                                Message message = storeResult.Messages.Array[storeResult.Messages.Offset];
+
+                                // Only add the message to the list if the stream index matches
+                                if (message.StreamIndex == streamIndex)
+                                {
+                                    items.Add(storeResult.Messages);
+                                    totalCount += storeResult.Messages.Count;
+
+                                    // We got a mapping id bigger than what we expected which
+                                    // means we missed messages. Use the new mappingId.
+                                    if (message.MappingId > mapping.Id)
+                                    {
+                                        return message.MappingId;
+                                    }
+                                }
+                                else
+                                {
+                                    // REVIEW: When the stream indexes don't match should we leave the mapping id as is?
+                                    // If we do nothing then we'll end up querying old cursor ids until
+                                    // we eventually find a message id that matches this stream index.
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return mapping.Id;
+        }
+
+        private void AddCursorForStream(int streamIndex, List<Cursor> cursors)
+        {
+            ScaleoutMapping maxMapping = _streams[streamIndex].MaxMapping;
+
+            ulong id = UInt64.MaxValue;
+            string key = streamIndex.ToString(CultureInfo.InvariantCulture);
+
+            if (maxMapping != null)
+            {
+                id = maxMapping.Id;
+            }
+
+            var newCursor = new Cursor(key, id);
+            cursors.Add(newCursor);
+        }
+
+        private class CachedStreamEnumerator
+        {
+            private readonly IEnumerator<ScaleoutMapping> _enumerator;
+            private ScaleoutMapping _cachedValue;
+
+            public CachedStreamEnumerator(IEnumerator<ScaleoutMapping> enumerator, int streamIndex)
+            {
+                _enumerator = enumerator;
+                StreamIndex = streamIndex;
+            }
+
+            public int StreamIndex { get; private set; }
+
+            public bool TryMoveNext(out ScaleoutMapping mapping)
+            {
+                mapping = null;
+
+                if (_cachedValue != null)
+                {
+                    mapping = _cachedValue;
+                    return true;
+                }
+
+                if (_enumerator.MoveNext())
+                {
+                    mapping = _enumerator.Current;
+                    _cachedValue = mapping;
+                    return true;
+                }
+
+                return false;
+            }
+
+            public void ClearCachedValue()
+            {
+                _cachedValue = null;
+            }
         }
     }
 }

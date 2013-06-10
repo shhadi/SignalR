@@ -10,7 +10,7 @@ namespace Microsoft.AspNet.SignalR.Transports
     /// <summary>
     /// Represents a connection that can be tracked by an <see cref="ITransportHeartbeat"/>.
     /// </summary>
-    public interface ITrackingConnection
+    public interface ITrackingConnection : IDisposable
     {
         /// <summary>
         /// Gets the id of the connection.
@@ -48,6 +48,11 @@ namespace Microsoft.AspNet.SignalR.Transports
         Uri Url { get; }
 
         /// <summary>
+        /// Applies a new state to the connection.
+        /// </summary>
+        void ApplyState(TransportConnectionStates states);
+
+        /// <summary>
         /// Causes the connection to disconnect.
         /// </summary>
         Task Disconnect();
@@ -67,10 +72,5 @@ namespace Microsoft.AspNet.SignalR.Transports
         /// </summary>
         [SuppressMessage("Microsoft.Naming", "CA1716:IdentifiersShouldNotMatchKeywords", MessageId = "End", Justification = "Ends the connction thus the name is appropriate.")]
         void End();
-
-        /// <summary>
-        /// Releases the http request associated with the connection (if any).
-        /// </summary>
-        void ReleaseRequest();
     }
 }

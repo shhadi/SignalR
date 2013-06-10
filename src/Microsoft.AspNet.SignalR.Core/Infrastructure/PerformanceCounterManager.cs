@@ -108,6 +108,25 @@ namespace Microsoft.AspNet.SignalR.Infrastructure
         public IPerformanceCounter ConnectionMessagesSentPerSec { get; private set; }
 
         /// <summary>
+        /// Gets the performance counter representing the total number of messages received by subscribers since the application was started.
+        /// </summary>
+        [PerformanceCounter(Name = "Message Bus Messages Received Total", Description = "The total number of messages received by subscribers since the application was started.", CounterType = PerformanceCounterType.NumberOfItems64)]
+        public IPerformanceCounter MessageBusMessagesReceivedTotal { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the number of messages received by a subscribers per second.
+        /// </summary>
+        [PerformanceCounter(Name = "Message Bus Messages Received/Sec", Description = "The number of messages received by subscribers per second.", CounterType = PerformanceCounterType.RateOfCountsPerSecond32)]
+        public IPerformanceCounter MessageBusMessagesReceivedPerSec { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the number of messages received by the scaleout message bus per second.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Message Bus Messages Received/Sec", Description = "The number of messages received by the scaleout message bus per second.", CounterType = PerformanceCounterType.RateOfCountsPerSecond32)]
+        public IPerformanceCounter ScaleoutMessageBusMessagesReceivedPerSec { get; private set; }
+
+
+        /// <summary>
         /// Gets the performance counter representing the total number of messages published to the message bus since the application was started.
         /// </summary>
         [PerformanceCounter(Name = "Messages Bus Messages Published Total", Description = "The total number of messages published to the message bus since the application was started.", CounterType = PerformanceCounterType.NumberOfItems64)]
@@ -203,6 +222,43 @@ namespace Microsoft.AspNet.SignalR.Infrastructure
         [PerformanceCounter(Name = "Errors: Transport/Sec", Description = "The number of transport errors per second.", CounterType = PerformanceCounterType.RateOfCountsPerSecond32)]
         public IPerformanceCounter ErrorsTransportPerSec { get; private set; }
 
+
+        /// <summary>
+        /// Gets the performance counter representing the number of logical streams in the currently configured scaleout message bus provider.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Streams Total", Description = "The number of logical streams in the currently configured scaleout message bus provider.", CounterType = PerformanceCounterType.NumberOfItems32)]
+        public IPerformanceCounter ScaleoutStreamCountTotal { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the number of logical streams in the currently configured scaleout message bus provider that are in the open state.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Streams Open", Description = "The number of logical streams in the currently configured scaleout message bus provider that are in the open state", CounterType = PerformanceCounterType.NumberOfItems32)]
+        public IPerformanceCounter ScaleoutStreamCountOpen { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the number of logical streams in the currently configured scaleout message bus provider that are in the buffering state.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Streams Buffering", Description = "The number of logical streams in the currently configured scaleout message bus provider that are in the buffering state", CounterType = PerformanceCounterType.NumberOfItems32)]
+        public IPerformanceCounter ScaleoutStreamCountBuffering { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the total number of scaleout errors since the application was started.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Errors Total", Description = "The total number of scaleout errors since the application was started.", CounterType = PerformanceCounterType.NumberOfItems32)]
+        public IPerformanceCounter ScaleoutErrorsTotal { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the number of scaleout errors per second.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Errors/Sec", Description = "The number of scaleout errors per second.", CounterType = PerformanceCounterType.RateOfCountsPerSecond32)]
+        public IPerformanceCounter ScaleoutErrorsPerSec { get; private set; }
+
+        /// <summary>
+        /// Gets the performance counter representing the current scaleout send queue length.
+        /// </summary>
+        [PerformanceCounter(Name = "Scaleout Send Queue Length", Description = "The current scaleout send queue length.", CounterType = PerformanceCounterType.NumberOfItems32)]
+        public IPerformanceCounter ScaleoutSendQueueLength { get; private set; }
+
         /// <summary>
         /// Initializes the performance counters.
         /// </summary>
@@ -287,7 +343,7 @@ namespace Microsoft.AspNet.SignalR.Infrastructure
 
                 if (loadCounters)
                 {
-                    counter = LoadCounter(CategoryName, attribute.Name, instanceName);
+                    counter = LoadCounter(CategoryName, attribute.Name, instanceName, isReadOnly:false);
 
                     if (counter == null)
                     {
@@ -319,13 +375,13 @@ namespace Microsoft.AspNet.SignalR.Infrastructure
 
         [SuppressMessage("Microsoft.Performance", "CA1822:MarkMembersAsStatic", Justification = "This file is shared")]
         [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Counters are disposed later")]
-        private IPerformanceCounter LoadCounter(string categoryName, string counterName, string instanceName)
+        public IPerformanceCounter LoadCounter(string categoryName, string counterName, string instanceName, bool isReadOnly)
         {
             // See http://msdn.microsoft.com/en-us/library/356cx381.aspx for the list of exceptions
             // and when they are thrown. 
             try
             {
-                var counter = new PerformanceCounter(categoryName, counterName, instanceName, readOnly: false);
+                var counter = new PerformanceCounter(categoryName, counterName, instanceName, isReadOnly);
 
                 // Initialize the counter sample
                 counter.NextSample();
